@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<title>three.js webgl - teapot buffer geometry</title>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+	<link type="text/css" rel="stylesheet" href="main.css">
+</head>
+
+<body>
+	<!-- Import maps polyfill -->
+	<!-- Remove this when import maps will be widely supported -->
+	<script async src="https://unpkg.com/es-module-shims@1.6.3/dist/es-module-shims.js"></script>
+
+	<script type="importmap">
+			{
+				"imports": {
+					"three": "../build/three.module.js",
+					"three/addons/": "./jsm/"
+				}
+			}
+		</script>
+
+	<script type="module">
+
+		import * as THREE from 'three';
+
+		import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
+		import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+		import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+		import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+		let camera, scene, renderer;
+		let cameraControls;
+		let effectController;
+		let ambientLight, light;
+		let mixer;
+		let shading;
+		let mesh;
+		let material;
+		let modelSize;
+		init();
+		//loader();
+		plane();
+		function init() {
+			const container = document.createElement('div');
+			document.body.appendChild(container);
+			const canvasWidth = window.innerWidth;
+			const canvasHeight = window.innerHeight;
+			// 创建摄像机
+			camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 80000);
+			camera.position.set(0, 0, 1000);
+			// 设置光线
+			ambientLight = new THREE.AmbientLight(0x7c7c7c);
+			light = new THREE.DirectionalLight(0xFFFFFF, 1.0);
+			light.position.set(0.32, 0.39, 0.7);
+			// RENDERER 着色器
+			renderer = new THREE.WebGLRenderer({ antialias: true });
+			renderer.setPixelRatio(window.devicePixelRatio);
+			renderer.setSize(canvasWidth, canvasHeight);
+			renderer.setClearColor(0xffffff);
+			container.appendChild(renderer.domElement);
+			// 窗口自动缩放事件
+			//window.addEventListener('resize', onWindowResize);
+			// 鼠标操作控制器
+			cameraControls = new OrbitControls(camera, renderer.domElement);
+			cameraControls.addEventListener('change', render);
+
+			// TEXTURE MAP 
+			//https://catkissfish-en-prod.oss-ap-southeast-1.aliyuncs.com/admin/theme/7238480410-admin/theme/26937464169-89059b19f40f8be93ae12d15b5f4a77.jpg?x-oss-process=image/resize,m_fill,w_150,h_130
+			//const textureMap = new THREE.TextureLoader().load( 'textures/uv_grid_opengl.jpg' );
+			//const texture = new THREE.TextureLoader().load('https://catkissfish-en-prod.oss-ap-southeast-1.aliyuncs.com/admin/theme/11730638710-admin/theme/61243518004-905.png?x-oss-process=image/resize,m_fill,w_150,h_150');
+			const texture = new THREE.TextureLoader().load('https://catkissfish-en-prod.oss-ap-southeast-1.aliyuncs.com/admin/theme/7238480410-admin/theme/26937464169-89059b19f40f8be93ae12d15b5f4a77.jpg?x-oss-process=image/resize,m_fill,w_150,h_130');
+
+
+			//纹理贴图水平
+			texture.wrapS = THREE.ClampToEdgeWrapping;
+			//纹理贴图垂直
+			texture.wrapT = THREE.ClampToEdgeWrapping;
+			// 设置纹理的过滤器以保持图片原始大小
+			// texture.minFilter = THREE.LinearFilter;
+			// texture.magFilter = THREE.LinearFilter;
+			// const scale = 1; // 缩放因子，调整为你希望的大小
+			// texture.repeat.set(scale, scale);
+
+			// 设置材质的 UV 映射，控制纹理的位置和大小
+			// const scaleU = 2; // U 方向的缩放因子，调整为你希望的大小
+			// const scaleV = 2; // V 方向的缩放因子，调整为你希望的大小
+			// texture.repeat.set(scaleU, scaleV);
+
+			// textureMap.anisotropy = 16;
+			// textureMap.colorSpace = THREE.SRGBColorSpace;
+
+			// textureMap.minFilter = THREE.NearestFilter;
+			// textureMap.magFilter = THREE.NearestFilter;
+
+			//texture.repeat.set(2, 2); // 在 u 和 v 方向上重复两次
+			//texture.offset.set(0.01, 0.01); // 在 u 和 v 方向上分别向右和向上偏移一半的尺寸
+			const maskTexture = new THREE.TextureLoader().load('https://catkissfish-en-prod.oss-ap-southeast-1.aliyuncs.com/admin/theme/7238480410-admin/theme/26937464169-89059b19f40f8be93ae12d15b5f4a77.jpg?x-oss-process=image/resize,m_fill,w_150,h_130');
+
+			material = new THREE.MeshBasicMaterial({
+				map: texture,
+				side: THREE.DoubleSide,
+				alphaMap: maskTexture,  // Mask 贴图
+				transparent: true
+			});
+
+			// scene itself
+			scene = new THREE.Scene();
+
+
+			scene.add(ambientLight);
+			//加入场景光线
+			scene.add(light);
+
+			// GUI
+			setupGui();
+		}
+		function plane() {
+			//矩形平面
+			const geometry = new THREE.BoxGeometry(500, 300, 200);
+			//const material = new THREE.MeshBasicMaterial({ color: 0xffff00, side: THREE.DoubleSide });
+
+
+			const plane = new THREE.Mesh(geometry, material);
+
+
+			plane.traverse(function (node) {
+				if (node.isMesh) {
+					// 设置材质的 UV 属性
+					const uvAttribute = node.geometry.getAttribute('uv');
+					const positionAttribute = node.geometry.getAttribute('position');
+
+					// 设置部分顶点的颜色为白色（表示使用 UV 贴图）
+					const vertices = geometry.attributes.position.array;
+					const colors = [];
+					// 遍历几何体的顶点，并计算对应的 UV 坐标
+					for (let i = 0; i < positionAttribute.count; i++) {
+						const x = positionAttribute.getX(i);
+						const y = positionAttribute.getY(i);
+						const z = positionAttribute.getZ(i);
+						// 计算 UV 坐标
+						// const u = /* 根据顶点位置计算 u 坐标 */;
+						// const v = /* 根据顶点位置计算 v 坐标 */;
+						// // 设置 UV 属性
+						// uvAttribute.setXY(i, u, v);
+						// 计算 UV 坐标
+						// const position = new THREE.Vector3(x, y, z);
+						// const uv = calculateUV(position);
+
+						switch (i) {
+							case 0:
+								colors.push(1, 1, 1, 1);
+								// //  设置 UV 属性
+								uvAttribute.setXY(i, 0, 0);
+								break;
+							case 1:
+								colors.push(1, 1, 1, 1);
+								// //  设置 UV 属性
+								uvAttribute.setXY(i, 1, 0);
+								break;
+							case 2:
+								colors.push(1, 1, 1, 1);
+								// //  设置 UV 属性
+								uvAttribute.setXY(i, 0, 1);
+								break;
+							case 3:
+								colors.push(1, 1, 1, 1);
+								// //  设置 UV 属性
+								uvAttribute.setXY(i, 1, 1);
+								break;
+							default:
+								//其他顶点使用不透明的黑色
+								colors.push(0, 0, 0, 0);
+								// 其他顶点设定为黑色或其他颜色
+								//node.material = materialOriginal;
+								//uvAttribute.setXY(i, 5, 5);
+								break;
+						}
+
+						//uvAttribute.setXY(i, 1, 1);
+					}
+					// 更新几何体的 UV 属性
+					node.geometry.uvsNeedUpdate = true;
+					// 创建顶点颜色属性并设置给几何体
+					const colorAttribute = new THREE.Float32BufferAttribute(colors, 4);
+					node.geometry.setAttribute('color', colorAttribute);
+					// 设置材质的顶点颜色属性以控制显示效果
+					material.vertexColors = true;
+					material.blending = THREE.NoBlending;
+				}
+			});
+
+			scene.add(plane);
+		}
+
+		function loader() {
+			const loader = new GLTFLoader()
+				// .setPath('./model/')
+				.setDRACOLoader(new DRACOLoader().setDecoderPath('jsm/libs/draco/gltf/'))
+			//http://catkissfish-en-prod.oss-ap-southeast-1.aliyuncs.com/admin/model/1993731358-%E4%B8%BB%E6%A8%A1%E5%9E%8B.glb
+			//https://catkissfish-en-prod.oss-ap-southeast-1.aliyuncs.com/admin/model/1666609963-263%20TBX%20%E5%90%8E%E8%83%8C%E5%BC%80%E5%8F%89%E8%83%8C%E5%BF%8306-10.glb
+			//https://catkissfish-en-prod.oss-ap-southeast-1.aliyuncs.com/admin/model/1704983784-014%20%20NQ%20%20%E8%BF%9E%E8%A1%A3%E8%A3%995.20.glb
+			loader.load('https://catkissfish-en-prod.oss-ap-southeast-1.aliyuncs.com/admin/model/1811439138-%E4%B8%BB%E6%A8%A1%E5%9E%8B.glb', function (gltf) {
+				gltf.scene.scale.set(100, 100, 100)
+				const model = gltf.scene;
+				model.position.set(0, -1100, 200);
+
+				const geometry = model.children[0].geometry; // 假设模型的几何体位于第一个子对象上
+				//const hasUV = geometry.attributes.hasOwnProperty('uv');
+				const uvAttribute = geometry.attributes.uv;
+
+
+
+				// 获取模型的包围盒
+				const box = new THREE.Box3().setFromObject(model);
+				const size = new THREE.Vector3();
+				box.getSize(size);
+				modelSize = Math.max(size.x, size.y, size.z);
+				// for (let i = 0; i < uvAttribute.count; i++) {
+				// 	const u = uvAttribute.getX(i);
+				// 	const v = uvAttribute.getY(i);
+				// 	// 根据需要修改 UV 坐标
+				// 	// 例如，将整个贴图缩放到左上四分之一区域
+				// 	uvAttribute.setXY(i, u * 0.5, v * 0.5);
+				// }
+				mesh = model;
+				//遍历mesh
+				model.traverse(function (node) {
+					if (node.isMesh) {
+						//node.material = material;
+						// 设置材质的 UV 属性
+						const uvAttribute = node.geometry.getAttribute('uv');
+						const positionAttribute = node.geometry.getAttribute('position');
+
+						// 遍历几何体的顶点，并计算对应的 UV 坐标
+						for (let i = 0; i < positionAttribute.count; i++) {
+							const x = positionAttribute.getX(i);
+							const y = positionAttribute.getY(i);
+							const z = positionAttribute.getZ(i);
+
+							// 计算 UV 坐标
+							// const u = /* 根据顶点位置计算 u 坐标 */;
+							// const v = /* 根据顶点位置计算 v 坐标 */;
+							// // 设置 UV 属性
+							// uvAttribute.setXY(i, u, v);
+							// 计算 UV 坐标
+							// const position = new THREE.Vector3(x, y, z);
+							// const uv = calculateUV(position);
+
+							// //  设置 UV 属性
+							// //uvAttribute.setXY(i, uv.x, uv.y);
+
+							// uvAttribute.setXY(i, 1, 0.5);
+						}
+
+						// 更新几何体的 UV 属性
+						node.geometry.uvsNeedUpdate = true;
+
+
+
+					}
+				});
+				scene.add(model);
+				mixer = new THREE.AnimationMixer(model);
+				render();
+			})
+		}
+
+		// 计算 UV 坐标
+		function calculateUV(position) {
+			const u = (position.x + modelSize / 2) / modelSize; // 根据 x 坐标映射 u 值
+			const v = (position.y + modelSize / 2) / modelSize; // 根据 y 坐标映射 v 值
+			return new THREE.Vector2(u, v);
+		}
+		// EVENT HANDLERS
+		function onWindowResize() {
+			const canvasWidth = window.innerWidth;
+			const canvasHeight = window.innerHeight;
+			renderer.setSize(canvasWidth, canvasHeight);
+			camera.aspect = canvasWidth / canvasHeight;
+			camera.updateProjectionMatrix();
+			render();
+		}
+
+		function setupGui() {
+			const gui = new GUI();
+		}
+
+
+		//重新渲染
+		function render() {
+			renderer.render(scene, camera);
+		}
+
+
+
+
+		// 创建一个全局变量来跟踪鼠标状态和贴图偏移
+		let isDragging = false;
+		let previousMouseX = 0;
+		let previousMouseY = 0;
+		let textureOffsetX = 0;
+		let textureOffsetY = 0;
+		//射线
+		const raycaster = new THREE.Raycaster();
+		// 监听鼠标按下事件
+		document.addEventListener('mousedown', (event) => {
+			// 计算鼠标点击位置的归一化设备坐标
+			const mouse = new THREE.Vector2();
+			mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+			mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+			// 更新射线的起点和方向
+			raycaster.setFromCamera(mouse, camera);
+			// 判断是否点击到贴图
+			const intersects = raycaster.intersectObject(mesh);
+
+
+			// 遍历交点数组
+			for (let i = 0; i < intersects.length; i++) {
+				const intersection = intersects[i];
+				const object = intersection.object;
+
+				// 判断是否点击到目标材质
+				if (object.material === material) {
+					// 在这里执行点击到目标材质的操作
+					console.log('点击到目标材质！');
+					break;
+				}
+			}
+		});
+
+		// 监听鼠标移动事件
+		document.addEventListener('mousemove', (event) => {
+			if (isDragging) {
+				// 计算鼠标移动的偏移量
+				const deltaX = event.clientX - previousMouseX;
+				const deltaY = event.clientY - previousMouseY;
+
+				// 根据偏移量调整贴图的偏移
+				textureOffsetX += deltaX * 0.001;
+				textureOffsetY += deltaY * 0.001;
+
+				// 更新上一次鼠标位置
+				previousMouseX = event.clientX;
+				previousMouseY = event.clientY;
+			}
+		});
+
+		// 监听鼠标释放事件
+		document.addEventListener('mouseup', () => {
+			isDragging = false;
+		});
+
+		// 在渲染循环中更新贴图的偏移
+		function animate() {
+			requestAnimationFrame(animate);
+
+			// 将贴图的偏移应用到材质的偏移属性
+			material.map.offset.set(textureOffsetX, textureOffsetY);
+
+			// 渲染场景
+			renderer.render(scene, camera);
+		}
+
+		// 调用 animate() 启动渲染循环
+		animate();
+
+
+	</script>
+
+</body>
+
+</html>
